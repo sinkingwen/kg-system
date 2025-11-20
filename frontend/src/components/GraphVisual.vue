@@ -1,5 +1,4 @@
 <template>
-  <!-- 模板部分保持不变 -->
   <div class="graph-wrapper" style="width: 100%; height: 550px; position: relative;">
     <div class="search-bar" style="margin-bottom: 10px; display: flex; gap: 10px;">
       <el-input
@@ -11,9 +10,18 @@
       ></el-input>
       <el-button type="primary" @click="handleSearch">搜索</el-button>
       <el-button @click="showAllGraph">显示全部</el-button>
+      <!-- 新增：全屏按钮（带图标） -->
+      <el-button 
+        type="primary" 
+        @click="toggleFullScreen"
+        icon="Fullscreen"  
+        circle
+        title="全屏展示图谱"
+      >全屏</el-button>
     </div>
 
-    <div style="width: 100%; height: 500px; position: relative;">
+    <!-- 修改：给图谱容器添加动态class，用于全屏样式控制 -->
+    <div :class="['graph-container', { 'fullscreen': isFullScreen }]" style="width: 100%; height: 500px; position: relative;">
       <div v-if="loading" class="loading">
         {{ currentEntity ? `加载「${currentEntity}」相关图谱...` : '加载知识图谱中...' }}
       </div>
@@ -31,12 +39,13 @@
     </div>
   </div>
 </template>
-
 <script setup>
 import { ref, onMounted, nextTick, onUnmounted, watch, defineProps, defineEmits } from 'vue';
 import { api } from '../api/index';
 import { Network, DataSet } from 'vis-network/standalone';
 import { ElButton, ElMessage, ElInput } from 'element-plus';
+// 原有导入保留，新增：导入全屏图标
+import { Fullscreen, FullscreenExit } from '@element-plus/icons-vue';
 
 // 接收父组件传递的核心实体
 const props = defineProps({
@@ -55,6 +64,8 @@ const network = ref(null); // 图谱实例（初始为null）
 const loading = ref(true);
 const searchEntity = ref('');
 const currentEntity = ref('');
+// 原有响应式数据保留，新增：全屏状态标识
+const isFullScreen = ref(false); // 控制全屏状态
 
 // 销毁图谱实例（增加非空校验）
 const destroyNetwork = () => {
@@ -259,8 +270,57 @@ onMounted(async () => {
       network.value.redraw();
     }
   });
+  // 新增：绑定全屏事件监听
+  document.addEventListener('fullscreenchange', handleFullScreenChange);
+  document.addEventListener('webkitfullscreenchange', handleFullScreenChange);
+  document.addEventListener('msfullscreenchange', handleFullScreenChange);
 });
+// 新增：全屏切换核心方法
+const toggleFullScreen = () => {
+  // 获取图谱容器DOM
+  const container = document.querySelector('.graph-container');
+  if (!container) return;
 
+  try {
+    if (!isFullScreen.value) {
+      // 进入全屏（兼容多浏览器）
+      if (container.requestFullscreen) {
+        container.requestFullscreen();
+      } else if (container.webkitRequestFullscreen) { // Chrome/Safari
+        container.webkitRequestFullscreen();
+      } else if (container.msRequestFullscreen) { // IE/Edge
+        container.msRequestFullscreen();
+      }
+      ElMessage.success('已进入图谱全屏模式，按ESC键可退出');
+    } else {
+      // 退出全屏（兼容多浏览器）
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      } else if (document.msExitFullscreen) {
+        document.msExitFullscreen();
+      }
+      ElMessage.info('已退出图谱全屏模式');
+    }
+  } catch (error) {
+    ElMessage.error(`全屏操作失败：${error.message}`);
+  }
+};
+
+// 新增：监听全屏状态变化（同步isFullScreen，并重绘图谱）
+const handleFullScreenChange = () => {
+  // 检测当前是否处于全屏状态（兼容多浏览器）
+  const fullscreenElement = document.fullscreenElement || 
+                            document.webkitFullscreenElement || 
+                            document.msFullscreenElement;
+  isFullScreen.value = !!fullscreenElement;
+  
+  // 全屏状态变化时重绘图谱，避免尺寸异常
+  if (network.value) {
+    network.value.redraw();
+  }
+};
 // 卸载时销毁（增加非空校验）
 onUnmounted(() => {
   destroyNetwork();
@@ -269,6 +329,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* 原有loading样式保留 */
 .loading {
   position: absolute;
   top: 0;
@@ -282,5 +343,25 @@ onUnmounted(() => {
   z-index: 10;
   font-size: 16px;
   color: #666;
+}
+
+/* 新增：全屏状态下的容器样式 */
+.graph-container.fullscreen {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 9999 !important;
+  background: white !important;
+  border: none !important;
+  margin: 0 !important;
+  padding: 20px !important;
+}
+
+/* 新增：全屏状态下的图谱内容区样式 */
+.graph-container.fullscreen >>> .vis-network {
+  width: 100% !important;
+  height: 100% !important;
 }
 </style>
